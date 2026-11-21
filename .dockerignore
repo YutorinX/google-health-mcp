@@ -1,0 +1,6 @@
+.git
+credentials.json
+token.json
+*.zip
+/google-health-mcp
+/google-health-mcp.exe

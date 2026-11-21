@@ -1,0 +1,122 @@
+name: CI / Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Resolve modules
+        run: |
+          if [ ! -f go.sum ]; then
+            echo "::warning::go.sum is not committed. Run 'go mod tidy' locally and commit it for reproducible builds."
+            go mod tidy
+          fi
+          go mod download
+
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+      - name: Lint deploy scripts
+        run: |
+          bash -n deploy/*.sh
+          shellcheck deploy/*.sh
+
+      - name: Build container (pull requests only; main builds in deploy)
+        if: github.event_name == 'pull_request'
+        run: docker build -t google-health-mcp:pr .
+
+  deploy:
+    needs: test
+    # Skipped until deploy/setup-github-ci.sh has set the repo variables; the
+    # check below still catches a partially configured repo.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      vars.GCP_PROJECT_ID != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # keyless auth to Google Cloud via Workload Identity Federation
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+    steps:
+      - name: Check configuration
+        run: |
+          missing=()
+          for v in GCP_PROJECT_ID GCP_REGION CLOUD_RUN_SERVICE GCP_WIF_PROVIDER GCP_DEPLOYER_SA; do
+            [ -n "${!v}" ] || missing+=("$v")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing repository variables: ${missing[*]}. Run deploy/setup-github-ci.sh once (see README)."
+            exit 1
+          fi
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+          GCP_DEPLOYER_SA: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: actions/checkout@v7
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and push image
+        id: image
+        run: |
+          image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/server:${GITHUB_SHA}"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build --label "org.opencontainers.image.revision=${GITHUB_SHA}" -t "$image" .
+          docker push "$image"
+          echo "ref=$image" >> "$GITHUB_OUTPUT"
+
+      # Only the image changes here. Env vars, secrets, service account and
+      # public access stay as deploy/cloudrun.sh configured them.
+      - name: Deploy to Cloud Run
+        run: |
+          if ! gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(metadata.name)' >/dev/null 2>&1; then
+            echo "::error::Service $SERVICE doesn't exist yet. Run deploy/cloudrun.sh deploy once to create and configure it."
+            exit 1
+          fi
+          gcloud run deploy "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "${{ steps.image.outputs.ref }}" \
+            --quiet
+
+      - name: Smoke test
+        run: |
+          url="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          for _ in 1 2 3 4 5; do
+            if curl -fsS "$url/health"; then
+              echo "Deployed: $url/mcp" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::$url/health did not respond"
+          exit 1
