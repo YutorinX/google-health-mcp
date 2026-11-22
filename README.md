@@ -273,6 +273,12 @@ Your agent needs the **MCP URL**: your service URL followed by `/mcp`.
 | **Cursor** | `~/.cursor/mcp.json`: `{"mcpServers": {"google-health": {"url": "https://…/mcp"}}}` |
 | **Anything else** | Any client with remote MCP (Streamable HTTP) and OAuth support. Leave client ID and secret empty: the server registers clients automatically. |
 
+`deploy/cloudrun.sh` lets only Claude on the web (`claude.ai`, `claude.com`)
+register by default. For other clients, redeploy with their redirect hosts added
+to `ALLOWED_REDIRECT_HOSTS`, such as `localhost,127.0.0.1` for Claude Code.
+Clients that redirect to an app scheme, such as Cursor, are refused while the
+list is set.
+
 Most phone apps can't add connectors from the phone. Add it on the web version
 once, and it shows up on your phone. Menu names change often, so check your
 app's docs if these don't match.
@@ -425,7 +431,7 @@ zone stay as the deploy script set them.
 | `MCP_SIGNING_KEY` | Base64, at least 32 random bytes. Encrypts all issued tokens. |
 | `GOOGLE_HEALTH_TZ` | Time zone for "today" (default UTC) |
 | `GOOGLE_HEALTH_EXTRA_SCOPES` | Extra read scopes, such as `nutrition.readonly,ecg.readonly`. Add them to the sign-in screen too. |
-| `ALLOWED_REDIRECT_HOSTS` | Optional strict mode: only these hosts may register as clients, such as `claude.ai,claude.com,localhost,127.0.0.1`. App schemes like `cursor://` are refused. |
+| `ALLOWED_REDIRECT_HOSTS` | Strict mode: only these hosts may register as clients, such as `claude.ai,claude.com,localhost,127.0.0.1`. App schemes like `cursor://` are refused. Unset on the server, any https, loopback or app-scheme redirect is allowed; `deploy/cloudrun.sh` always sets it (default `claude.ai,claude.com`). |
 | `PORT` | Listen port (default 8080) |
 
 `deploy/cloudrun.sh` also accepts `REGION` (default `europe-north1`) and
@@ -440,6 +446,9 @@ zone stay as the deploy script set them.
 | `-no-browser` | `login` prints the URL instead of opening a browser |
 | `GOOGLE_HEALTH_MCP_DIR` | Where `credentials.json` and the token are kept |
 | `logout` | Deletes the saved token |
+
+Both servers also read `GOOGLE_HEALTH_API_BASE`, which replaces the Health API
+base URL.
 
 **Limits.** `get_data_points` returns at most about 200 records (about 120 KB)
 and says when it stopped. Dense data such as heart rate belongs in `get_rollup`
