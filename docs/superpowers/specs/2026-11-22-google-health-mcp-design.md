@@ -129,7 +129,7 @@ Dockerfile の `golang:1.27` と `gcr.io/distroless/static-debian12:nonroot` は
 
 GitHub Actions からの自動デプロイ（`deploy/setup-github-ci.sh`）は使わず、手元から `cloudrun.sh` でデプロイする（提案）。Workload Identity などの設定が増えるわりに、1人で手元から操作する運用では得るものが少ない。
 
-予算アラートの金額は、月1,000円に対して50%、90%、100%で通知する案とする（提案）。
+予算アラートは、月5ドル相当（請求先アカウントの通貨で設定する）に対して50%、90%、100%で通知する（利用者の決定）。Cloud Run と Secret Manager は1人の利用なら無料枠に収まる見込みで、費用が出るとすれば Artifact Registry に溜まるイメージの保存料である。予算アラートは通知するだけで課金を止めないため、費用の上限は max instances 1 で抑える。
 
 ## 作業の順序と確かめ方
 
