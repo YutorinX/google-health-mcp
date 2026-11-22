@@ -481,7 +481,7 @@ func (s *server) googleCallback(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, s.cfg.HTTPClient)
 	tok, err := s.google.Exchange(ctx, q.Get("code"), oauth2.VerifierOption(p.Verifier))
 	if err != nil {
-		log.Printf("google code exchange failed: %v", err)
+		log.Printf("google code exchange failed: %s", googleErrSummary(err))
 		fail("server_error", "could not complete Google sign-in")
 		return
 	}
@@ -583,7 +583,7 @@ func (s *server) token(w http.ResponseWriter, r *http.Request) {
 		// to run the authorization flow again.
 		if _, err := s.googleSource(g.GRT).Token(); err != nil {
 			s.forget(g.GRT)
-			log.Printf("google refresh failed for user %s: %v", s.userRef(g.Email), err)
+			log.Printf("google refresh failed for user %s: %s", s.userRef(g.Email), googleErrSummary(err))
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "the Google login has expired; reconnect")
 			return
 		}
@@ -623,7 +623,7 @@ func (s *server) verify(ctx context.Context, token string, _ *http.Request) (*au
 	src := s.googleSource(g.GRT)
 	if _, err := src.Token(); err != nil {
 		s.forget(g.GRT)
-		log.Printf("google token refresh failed for user %s: %v", s.userRef(g.Email), err)
+		log.Printf("google token refresh failed for user %s: %s", s.userRef(g.Email), googleErrSummary(err))
 		return nil, fmt.Errorf("%w: Google login expired", auth.ErrInvalidToken)
 	}
 	return &auth.TokenInfo{
