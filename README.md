@@ -275,7 +275,8 @@ Your agent needs the **MCP URL**: your service URL followed by `/mcp`.
 
 `deploy/cloudrun.sh` lets only Claude on the web (`claude.ai`, `claude.com`)
 register by default. For other clients, redeploy with their redirect hosts added
-to `ALLOWED_REDIRECT_HOSTS`, such as `localhost,127.0.0.1` for Claude Code.
+to `ALLOWED_REDIRECT_HOSTS`, such as `localhost,127.0.0.1` for Claude Code
+(or use Claude Code with the local server instead).
 Clients that redirect to an app scheme, such as Cursor, are refused while the
 list is set.
 
@@ -434,8 +435,8 @@ zone stay as the deploy script set them.
 | `ALLOWED_REDIRECT_HOSTS` | Strict mode: only these hosts may register as clients, such as `claude.ai,claude.com,localhost,127.0.0.1`. App schemes like `cursor://` are refused. Unset on the server, any https, loopback or app-scheme redirect is allowed; `deploy/cloudrun.sh` always sets it (default `claude.ai,claude.com`). |
 | `PORT` | Listen port (default 8080) |
 
-`deploy/cloudrun.sh` also accepts `REGION` (default `europe-north1`) and
-`SERVICE` (default `google-health-mcp`).
+`deploy/cloudrun.sh` also accepts `REGION` (default `europe-north1`),
+`SERVICE` (default `google-health-mcp`) and `MAX_INSTANCES` (default 1).
 
 **Local server** (`google-health-mcp`):
 
