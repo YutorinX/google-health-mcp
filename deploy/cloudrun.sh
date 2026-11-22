@@ -32,6 +32,15 @@ KEY_SECRET="${SERVICE}-signing-key"
 CLIENT_SECRET_NAME="${SERVICE}-google-client-secret"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+if [[ ! "$REDIRECT_HOSTS" =~ [^[:space:],] ]]; then
+  echo "ALLOWED_REDIRECT_HOSTS must list at least one host" >&2
+  exit 1
+fi
+if [[ ! "$MAX_INSTANCES" =~ ^[1-9][0-9]*$ ]]; then
+  echo "MAX_INSTANCES must be a positive integer" >&2
+  exit 1
+fi
+
 g() { gcloud --project "$PROJECT_ID" --quiet "$@"; }
 
 PROJECT_NUMBER="$(g projects describe "$PROJECT_ID" --format='value(projectNumber)')"
