@@ -16,7 +16,9 @@
 #
 # Optional: REGION (default europe-north1), SERVICE (default
 # google-health-mcp), GOOGLE_HEALTH_TZ (default UTC; e.g. Europe/Stockholm),
-# GOOGLE_HEALTH_EXTRA_SCOPES (e.g. nutrition.readonly,ecg.readonly).
+# GOOGLE_HEALTH_EXTRA_SCOPES (e.g. nutrition.readonly,ecg.readonly),
+# ALLOWED_REDIRECT_HOSTS (default claude.ai,claude.com), MAX_INSTANCES
+# (default 1).
 set -euo pipefail
 
 : "${PROJECT_ID:?set PROJECT_ID to your Google Cloud project id}"
@@ -24,9 +26,20 @@ REGION="${REGION:-europe-north1}"
 SERVICE="${SERVICE:-google-health-mcp}"
 TZ_NAME="${GOOGLE_HEALTH_TZ:-UTC}"
 EXTRA_SCOPES="${GOOGLE_HEALTH_EXTRA_SCOPES:-}"
+REDIRECT_HOSTS="${ALLOWED_REDIRECT_HOSTS:-claude.ai,claude.com}"
+MAX_INSTANCES="${MAX_INSTANCES:-1}"
 KEY_SECRET="${SERVICE}-signing-key"
 CLIENT_SECRET_NAME="${SERVICE}-google-client-secret"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [[ ! "$REDIRECT_HOSTS" =~ [^[:space:],] ]]; then
+  echo "ALLOWED_REDIRECT_HOSTS must list at least one host" >&2
+  exit 1
+fi
+if [[ ! "$MAX_INSTANCES" =~ ^[1-9][0-9]*$ ]]; then
+  echo "MAX_INSTANCES must be a positive integer" >&2
+  exit 1
+fi
 
 g() { gcloud --project "$PROJECT_ID" --quiet "$@"; }
 
@@ -98,9 +111,9 @@ g run deploy "$SERVICE" \
   --source "$ROOT" \
   --service-account "$RUN_SA" \
   --allow-unauthenticated \
-  --min-instances 0 --max-instances 2 \
+  --min-instances 0 --max-instances "$MAX_INSTANCES" \
   --cpu 1 --memory 256Mi --concurrency 20 --timeout 120 \
-  --set-env-vars "^|^PUBLIC_URL=$URL|ALLOWED_EMAILS=$ALLOWED_EMAILS|GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID|GOOGLE_HEALTH_TZ=$TZ_NAME|GOOGLE_HEALTH_EXTRA_SCOPES=$EXTRA_SCOPES" \
+  --set-env-vars "^|^PUBLIC_URL=$URL|ALLOWED_EMAILS=$ALLOWED_EMAILS|GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID|GOOGLE_HEALTH_TZ=$TZ_NAME|GOOGLE_HEALTH_EXTRA_SCOPES=$EXTRA_SCOPES|ALLOWED_REDIRECT_HOSTS=$REDIRECT_HOSTS" \
   --set-secrets "MCP_SIGNING_KEY=${KEY_SECRET}:latest,GOOGLE_OAUTH_CLIENT_SECRET=${CLIENT_SECRET_NAME}:latest"
 
 if curl -fsS "$URL/health" >/dev/null 2>&1; then
